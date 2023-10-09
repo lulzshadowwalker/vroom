@@ -1,6 +1,6 @@
 OUT_DIR = ./bin
 
-.PHONY: run dev prod
+.PHONY: run dev prod migrate
 
 run: prod
 
@@ -13,3 +13,6 @@ prod:
 dev:
 	go run ./cmd/server/main.go&
 	go run ./cmd/client/main.go
+
+migrate: 
+	go run ./cmd/migrations/main.go
