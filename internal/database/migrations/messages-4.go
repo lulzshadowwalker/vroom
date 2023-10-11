@@ -9,7 +9,7 @@ func (m *Migration) messages() error {
 	_, err := m.db.Exec(`
 		CREATE TABLE IF NOT EXISTS messages(
 			id INT PRIMARY KEY AUTO_INCREMENT, 
-			sender_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			sender_id INT NOT NULL REFERENCES users(id) ON DELETE SET NULL,
 			room_id INT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
 			content TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP(),

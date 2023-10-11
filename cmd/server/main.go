@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	s, err := chat.NewServer(":3000")
+	s, err := chat.NewServer(":3124")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot instantiate a server %q", err)
 		os.Exit(1)

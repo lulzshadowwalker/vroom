@@ -1,8 +1,6 @@
 OUT_DIR = ./bin
 
-.PHONY: run dev prod migrate
-
-run: prod
+.PHONY: dev prod migrate
 
 prod: 
 	go build -o ${OUT_DIR}/server ./cmd/server/main.go
@@ -12,6 +10,12 @@ prod:
 
 dev:
 	go run ./cmd/server/main.go&
+	go run ./cmd/client/main.go
+
+server: 
+	go run ./cmd/server/main.go
+
+client: 
 	go run ./cmd/client/main.go
 
 migrate: 

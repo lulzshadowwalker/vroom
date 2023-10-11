@@ -8,7 +8,7 @@ import (
 func (m *Migration) users() error {
 	_, err := m.db.Exec(`
 		CREATE TABLE IF NOT EXISTS users(
-			id CHAR(32) PRIMARY KEY, -- uuid v4 
+			id INT PRIMARY KEY AUTO_INCREMENT,
 			username NVARCHAR(32) NOT NULL,
 			email NVARCHAR(254) NOT NULL,
 			password NVARCHAR(80) NOT NULL,

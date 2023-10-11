@@ -6,11 +6,36 @@ import (
 	"net"
 	"os"
 
+	"github.com/lulzshadowwalker/vroom/internal/database"
+	"github.com/lulzshadowwalker/vroom/pkg/auth"
 	"github.com/lulzshadowwalker/vroom/pkg/chat"
+	"github.com/lulzshadowwalker/vroom/pkg/repo"
+	"github.com/lulzshadowwalker/vroom/pkg/utils"
 )
 
 func main() {
-	tcpAddress, err := net.ResolveTCPAddr("tcp4", "localhost:3000")
+	authHandler := auth.AuthHandler{
+		Repo: &repo.AuthRepo{
+			Db: database.Db,
+		},
+	}
+
+	user, err := authHandler.Trigger()
+	if err != nil {
+		if _, ok := err.(*utils.AppErr); ok {
+			fmt.Println(err)
+		} else {
+			fmt.Println("cannot sign in", err)
+			// TODO add logger
+		}
+
+		return
+	}
+
+	fmt.Println(user)
+	return
+
+	tcpAddress, err := net.ResolveTCPAddr("tcp4", "localhost:3124")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot instantiate a server %q", err)
 		os.Exit(1)
