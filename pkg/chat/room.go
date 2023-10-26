@@ -7,5 +7,9 @@ type Room struct {
 }
 
 func (r *Room) addMember(c *Client) {
+	if r.Members == nil {
+		r.Members = make(map[*Client]bool)
+	}
+
 	r.Members[c] = true
 }

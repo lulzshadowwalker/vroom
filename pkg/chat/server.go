@@ -18,6 +18,8 @@ func NewServer(address string) (*Server, error) {
 		return nil, fmt.Errorf("cannot resolve tcp address %w", err)
 	}
 
+	// TODO fetch rooms from db
+
 	return &Server{
 		Address:          tcpAddress,
 		BroadcastChannel: make(chan Message),
@@ -45,8 +47,12 @@ func (s *Server) HandleBroadcast() {
 			continue
 		}
 
+		fmt.Println(1, s.Rooms[msg.RoomId].Members)
+
 		for m := range s.Rooms[msg.RoomId].Members {
-			m.Send(msg)
+      if (msg.SenderId != m.Id) {
+        m.Send(msg)
+      }
 		}
 	}
 }
@@ -61,5 +67,17 @@ func (s *Server) Run() {
 		for m := range s.Rooms[msg.RoomId].Members {
 			m.Send(msg)
 		}
+	}
+}
+
+func (s *Server) AddRoom(r *Room) {
+	s.Rooms[r.Name] = r
+}
+
+func (s *Server) message(content string) *Message {
+	return &Message{
+		SenderId: 0,
+		RoomId:   "SERVER",
+		Content:  content,
 	}
 }

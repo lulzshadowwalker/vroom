@@ -14,8 +14,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	s.Rooms["hello"] = &chat.Room{Id: "hello", Members: make(map[*chat.Client]bool)}
-
 	l, err := s.Listen()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -33,8 +31,6 @@ func main() {
 		}
 
 		client := chat.NewClient(s, con)
-		client.JoinRoom("general")
-		s.Rooms["hello"].Members[client] = true
 		go client.Handle()
 		s.Clients[client] = true
 	}

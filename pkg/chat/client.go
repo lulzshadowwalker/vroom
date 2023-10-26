@@ -1,3 +1,5 @@
+// TODO, init server with rooms from db 
+// TODO, register room operation with db
 package chat
 
 import (
@@ -6,14 +8,24 @@ import (
 	"fmt"
 	"net"
 	"strings"
+
+	"github.com/go-playground/validator"
+	"github.com/lulzshadowwalker/vroom/internal/database"
+	"github.com/lulzshadowwalker/vroom/pkg/repo"
+	"github.com/lulzshadowwalker/vroom/pkg/utils"
 )
 
+func init() {
+	validate = validator.New()
+}
+
+var validate *validator.Validate
+
 type Client struct {
-	Id         string
+	Id         int
 	Name       string
 	Server     *Server
 	Connection *net.TCPConn
-	Rooms      map[string]*Room
 	ActiveRoom *Room
 }
 
@@ -21,7 +33,6 @@ func NewClient(server *Server, con *net.TCPConn) *Client {
 	return &Client{
 		Server:     server,
 		Connection: con,
-		Rooms:      make(map[string]*Room),
 	}
 }
 
@@ -29,7 +40,7 @@ func (c *Client) Handle() {
 	const maxPacketSize = 512
 	buf := make([]byte, maxPacketSize)
 	for {
-		n, err := c.Connection.Read(buf)
+		n, err := c.Connection.Read(buf[0:])
 		if err != nil {
 			fmt.Println("client has disconnected")
 			return
@@ -38,68 +49,78 @@ func (c *Client) Handle() {
 		var msg Message
 		err = json.Unmarshal(buf[:n], &msg)
 		if err != nil {
-			fmt.Fprintf(c.Connection, "invalid message format %q\n", err)
+			c.Send(*c.Server.message(fmt.Sprintf("invalid message format %q\n", buf[:n])))
 			continue
 		}
+
+		c.Id = msg.SenderId
+		c.Name = msg.SenderName
 
 		const (
 			prefixCreate     = "create"
 			prefixJoin       = "join"
 			prefixLeave      = "leave"
 			prefixDisconnect = "dis"
+			prefixHelp       = "help"
 		)
 
-		if !strings.HasPrefix(msg.Content, "/") {
+		if !strings.HasPrefix(msg.Content, "~") {
+			if c.ActiveRoom == nil {
+				c.Send(*c.Server.message("you are not connected to any room (cmd: ~ join/create {room_name})"))
+			}
+
 			c.Server.BroadcastChannel <- msg
 			continue
 		}
 
-		cmd := strings.TrimPrefix(msg.Content, "/")
+		cmd := strings.Trim(msg.Content, "~ ")
 		switch {
+		case strings.HasPrefix(cmd, prefixCreate):
+			name := strings.TrimPrefix(cmd, prefixCreate)
+			if len(strings.TrimSpace(name)) == 0 {
+				c.Send(*c.Server.message("~ create {room_name}"))
+				continue
+			}
+
+			roomId, err := c.CreateRoom(name)
+			if err != nil {
+				// TODO add logging
+				c.Send(*c.Server.message(fmt.Sprintf("cannot create room %q", err)))
+				continue
+			}
+
+			c.Send(*c.Server.message("").WithMeta(map[MetaKey]any{
+				MkRoomId: roomId,
+			}))
 		case strings.HasPrefix(cmd, prefixJoin):
-			roomId := strings.TrimPrefix(cmd, prefixJoin)
-			err = c.JoinRoom(roomId)
+			roomId := strings.TrimSpace(strings.TrimPrefix(cmd, prefixJoin))
+			if len(strings.TrimSpace(roomId)) == 0 {
+				c.Send(*c.Server.message("~ join {room_name}"))
+				continue
+			}
+
+			err = c.JoinRoom(strings.TrimSpace(roomId))
 			if err != nil {
 				if errors.Is(err, ErrRoomNotExist) {
-					fmt.Fprintln(c.Connection, "room does not exist")
+					c.Send(*c.Server.message("room does not exist"))
 					continue
 				}
 
-				fmt.Fprintln(c.Connection, "cannot join room")
+				c.Send(*c.Server.message("cannot join room"))
 				fmt.Printf("cannot join room %q\n", err)
 			}
 
-		case strings.HasPrefix(cmd, prefixLeave):
-			err = c.LeaveRoom()
-			if err != nil {
-				if errors.Is(err, ErrNoActiveRoom) {
-					fmt.Fprintln(c.Connection, "you're not connected to any room")
-					continue
-				}
-
-				fmt.Fprintln(c.Connection, "cannot leave room")
-				fmt.Printf("cannot leave room %q\n", err)
-			}
-		case strings.HasPrefix(cmd, prefixDisconnect):
-			err = c.Disconnect()
-			if err != nil {
-				if errors.Is(err, ErrNoActiveRoom) {
-					fmt.Fprintln(c.Connection, "you're not connected to any room")
-					continue
-				}
-
-				fmt.Fprintln(c.Connection, "cannot disconnect from room")
-				fmt.Printf("cannot disconnect from room %q\n", err)
-			}
+			c.Send(*c.Server.message("").WithMeta(map[MetaKey]any{
+				MkRoomId: roomId,
+			}))
 		default:
-			fmt.Fprintln(c.Connection, "unrecognized command")
+			c.Send(*c.Server.message("unrecognized command"))
 		}
-		fmt.Println(string(buf[:n]))
 	}
 }
 
 func (c *Client) String() string {
-	return fmt.Sprintf("%s (%s)", c.Name, c.Id)
+	return fmt.Sprintf("%s (%d)", c.Name, c.Id)
 }
 
 func (c *Client) Send(msg Message) error {
@@ -116,6 +137,33 @@ func (c *Client) Send(msg Message) error {
 	return nil
 }
 
+func (c *Client) CreateRoom(name string) (roomId string, err error) {
+	err = validate.Var(name, "required,min=3")
+	if err != nil {
+		return "", utils.NewAppErr("room name has to be at least 3 characters long")
+	}
+
+	r := repo.RoomsRepo{
+		Db: database.Db,
+	}
+
+	roomId, err = r.Create(name, c.Id)
+	if err != nil {
+		return "", err
+	}
+
+	room := &Room{
+		Id:   roomId,
+		Name: name,
+	}
+	room.addMember(c)
+
+	c.ActiveRoom = room
+	c.Server.Rooms[roomId] = room
+
+	return
+}
+
 func (c *Client) JoinRoom(roomId string) error {
 	if c.Server.Rooms[roomId] == nil {
 		return ErrRoomNotExist
@@ -127,23 +175,19 @@ func (c *Client) JoinRoom(roomId string) error {
 	return nil
 }
 
-func (c *Client) LeaveRoom() error {
+func (c *Client) message(content string) *Message {
 	if c.ActiveRoom == nil {
-		return ErrNoActiveRoom
+		panic("you should not send a message without an active room")
 	}
 
-	delete(c.Rooms, c.ActiveRoom.Id)
-	delete(c.Server.Rooms, c.ActiveRoom.Id)
-	c.ActiveRoom = nil
-
-	return nil
-}
-
-func (c *Client) Disconnect() error {
-	if c.ActiveRoom == nil {
-		return ErrNoActiveRoom
+	return &Message{
+		SenderId: c.Id,
+		RoomId:   c.ActiveRoom.Id,
+		Content:  content,
 	}
-
-	c.ActiveRoom = nil
-	return nil
 }
+
+// TODO
+// customize colorscheme
+// fetch messages on login
+// fetch rooms on server init

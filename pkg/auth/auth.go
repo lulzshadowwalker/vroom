@@ -10,6 +10,10 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
+func init() {
+	validate = validator.New()
+}
+
 var validate *validator.Validate
 
 type AuthHandler struct {
@@ -19,10 +23,6 @@ type AuthHandler struct {
 type AuthHandlerRepo interface {
 	SignIn(email, password string) (*model.User, error)
 	SignUp(username, email, password string) (*model.User, error)
-}
-
-func init() {
-	validate = validator.New()
 }
 
 func (a *AuthHandler) Trigger() (*model.User, error) {
@@ -101,7 +101,12 @@ func (a *AuthHandler) signUp() (*model.User, error) {
 
 func getEmail() (res string, err error) {
 	validate := func(input string) error {
-		return validate.Var(input, "required,email")
+		err := validate.Var(input, "required,email")
+		if err != nil {
+			return errors.New("where is the email pepega")
+		}
+
+		return nil
 	}
 
 	templates := &promptui.PromptTemplates{
@@ -127,7 +132,12 @@ func getEmail() (res string, err error) {
 
 func getPassword() (res string, err error) {
 	validate := func(input string) error {
-		return validate.Var(input, "required,min=8")
+		err := validate.Var(input, "required,min=8")
+		if err != nil {
+			return errors.New("where is the password pepega")
+		}
+
+		return nil
 	}
 
 	templates := &promptui.PromptTemplates{
@@ -154,7 +164,12 @@ func getPassword() (res string, err error) {
 
 func getUsername() (res string, err error) {
 	validate := func(input string) error {
-		return validate.Var(input, "required,min=3")
+		err := validate.Var(input, "required,min=3")
+		if err != nil {
+			return errors.New("where is the username pepega")
+		}
+
+		return nil
 	}
 
 	templates := &promptui.PromptTemplates{
